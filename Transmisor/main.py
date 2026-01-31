@@ -1,53 +1,52 @@
 import struct
-from machine import Pin, SPI
-from nrf24l01 import NRF24L01
 import time
+from machine import Pin, ADC, SPI
+from nrf24l01 import NRF24L01
 
-print("--- MANDO FINAL: TOUCH + BAJO CONSUMO ---")
-
-# Pines
-sensor_touch = Pin(14, Pin.IN) 
-led_wroom = Pin(2, Pin.OUT) # Feedback visual
+# --- CONFIGURACIÓN DE HARDWARE ---
 csn = Pin(5, mode=Pin.OUT, value=1)
-ce = Pin(4, mode=Pin.OUT, value=0)
-spi = SPI(1, baudrate=4000000, polarity=0, phase=0,
+ce  = Pin(4, mode=Pin.OUT, value=0)
+
+# Joystick (Calibrado a 3.3V)
+joy_x = ADC(Pin(34))
+joy_y = ADC(Pin(35)) # Lo enviamos de una vez para cuando pongas el motor
+joy_btn = Pin(32, mode=Pin.IN, pull=Pin.PULL_UP)
+
+joy_x.atten(ADC.ATTN_11DB)
+joy_y.atten(ADC.ATTN_11DB)
+
+# NRF24L01 (SPI Hardware)
+spi = SPI(1, baudrate=4000000, polarity=0, phase=0, 
           sck=Pin(18), mosi=Pin(23), miso=Pin(19))
 
-nrf = NRF24L01(spi, csn, ce, payload_size=4)
+# Payload = 6 bytes (2 bytes X + 2 bytes Y + 2 bytes Botón)
+nrf = NRF24L01(spi, csn, ce, payload_size=6)
 
-# --- AJUSTE MAESTRO DE POTENCIA ---
-# Valor 0x02 significa:
-# - Velocidad: 1 Mbps (Súper estable)
-# - Potencia: -12 dBm (Baja corriente -> EVITA REINICIOS)
-nrf.reg_write(0x06, 0x02)
-
-# Canal 120 (Limpio de WiFi)
+# Configuración de Radio
+nrf.reg_write(0x06, 0x07) # Potencia MÁXIMA (0dBm) y 1Mbps
 nrf.set_channel(120)
+nrf.open_tx_pipe(b'\xe1\xf0\xf0\xf0\xf0')
 
-direccion = b'\xe1\xf0\xf0\xf0\xf0'
-nrf.open_tx_pipe(direccion)
-
-print("Mando listo. Toca el sensor...")
-estado_anterior = -1 
+print("Mando listo. Enviando datos...")
 
 while True:
     try:
-        estado_actual = sensor_touch.value()
+        # 1. Leer sensores
+        x = joy_x.read()
+        y = joy_y.read()
+        b = joy_btn.value() # 1=Suelto, 0=Presionado
         
-        if estado_actual != estado_anterior:
-            # Feedback visual local
-            led_wroom.value(estado_actual)
-            
-            print(f"Enviando: {estado_actual}")
-            mensaje = struct.pack("i", estado_actual)
-            nrf.send(mensaje)
-            
-            estado_anterior = estado_actual
-            
-        time.sleep(0.05)
+        # 2. Empaquetar (H = entero de 2 bytes)
+        # Enviamos: Eje X, Eje Y, Estado Botón
+        paquete = struct.pack("HHH", x, y, b)
+        
+        # 3. Enviar
+        nrf.send(paquete)
+        
+        # Debug (Opcional: comenta esta línea si va muy lento)
+        # print(f"TX -> X:{x} Y:{y} Btn:{b}")
         
     except OSError:
-        # Si da error, parpadeo rápido
-        led_wroom.value(0)
-        time.sleep(0.05)
-        led_wroom.value(1)
+        pass # Ignorar errores puntuales de envío
+        
+    time.sleep(0.02) # ~50 veces por segundo (muy fluido)
