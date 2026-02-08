@@ -1,0 +1,32 @@
+# IDEs y Editores (Configuraciones personales)
+.idea/
+.vscode/
+*.swp
+
+
+# Ignorar archivos compilados de Python
+__pycache__/
+*.pyc
+
+# Ignorar entornos virtuales 
+venv/
+.venv/
+env/
+ENV/
+
+# Ignorar archivos de sistema
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+#MicroPython y Hardware (Archivos binarios)
+*.bin
+*.hex
+*.elf
+
+#PlatformIO (para C++)
+.pio/
+
+# Checkpoints automáticos de Jupyter (muy molestos en Git)
+.ipynb_checkpoints
